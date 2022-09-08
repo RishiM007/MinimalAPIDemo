@@ -1,5 +1,8 @@
+using AutoMapper;
+using MagicVilla_CouponAPI;
 using MagicVilla_CouponAPI.Data;
 using MagicVilla_CouponAPI.Models;
+using MagicVilla_CouponAPI.Models.DTO;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.OpenApi;
 
@@ -9,6 +12,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddAutoMapper(typeof(MappingConfig));
 
 var app = builder.Build();
 
@@ -48,31 +52,39 @@ app.MapGet("/helloworld/{id:int}", (int id) =>
 app.MapPost("/helloworld2", () => Results.Ok("Hello World2"));
 
 
-app.MapGet("/api/coupon", () => {
+app.MapGet("/api/coupon", (ILogger<Program> _logger) => {
+    _logger.Log(LogLevel.Information, "Getting All Coupons");
      return Results.Ok(CouponStore.couponList);
-    }).WithName("GetCoupons");
+    }).WithName("GetCoupons").Produces<IEnumerable<Coupon>>(200);
 
 app.MapGet("/api/coupon{id:int}", (int id) => {
     return Results.Ok(CouponStore.couponList.FirstOrDefault(u => u.Id==id));
-}).WithName("GetCoupon");
+}).WithName("GetCoupon").Produces<Coupon>(200);
 
-app.MapPost("/api/coupon", ([FromBody] Coupon coupon) => {
-    if (coupon.Id != 0 || string.IsNullOrEmpty(coupon.Name)) 
+app.MapPost("/api/coupon", (IMapper _mapper, [FromBody] CouponCreateDTO coupon_C_DTO) => {
+    if (string.IsNullOrEmpty(coupon_C_DTO.Name)) 
     {
         return Results.BadRequest("Invalid ID or Coupon Name");
     }
 
-    if (CouponStore.couponList.FirstOrDefault(u=>u.Name.ToLower()== coupon.Name.ToLower()) != null)
+    if (CouponStore.couponList.FirstOrDefault(u=>u.Name.ToLower()== coupon_C_DTO.Name.ToLower()) != null)
     {
         return Results.BadRequest("Coupon Name Alreadt Exisits");
-    }   
+    }
 
-     coupon.Id = CouponStore.couponList.OrderByDescending(u => u.Id).FirstOrDefault().Id + 1;
+    Coupon coupon = _mapper.Map<Coupon>(coupon_C_DTO);
+
+
+    coupon.Id = CouponStore.couponList.OrderByDescending(u => u.Id).FirstOrDefault().Id + 1;
     CouponStore.couponList.Add(coupon);
+
+    CouponDTO couponDTO = _mapper.Map<CouponDTO>(coupon);    
+   
     // return Results.Ok(coupon);
     //return Results.Created($"/api/coupon/{coupon.Id}", coupon);
-    return Results.CreatedAtRoute("GetCoupon", new { id = coupon.Id } ,coupon);
-}).WithName("CreateCoupon");
+    return Results.CreatedAtRoute("GetCoupon", new { id = coupon.Id } , couponDTO);
+    //}).WithName("CreateCoupon").Produces<Coupon>(201).Produces(400);
+}).WithName("CreateCoupon").Accepts<CouponCreateDTO>("application/json").Produces<CouponDTO>(201).Produces(400);
 
 app.MapPut("/api/coupon", () =>
 {
